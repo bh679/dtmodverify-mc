@@ -162,7 +162,7 @@ public final class InstalledFileScanner {
         Set<Path> exempt = new HashSet<>();
         Path modsDir = modsDir();
         for (var info : ModList.get().getMods()) {
-            Path path = outermostPath(info.getOwningFile().getFile(), modsDir);
+            Path path = outermostPath(info.getOwningFile().getFile(), modsDir, true);
             String id = normalise(info.getModId());
             if (exemptIds.contains(id)) exempt.add(path);
             files.computeIfAbsent(path, p -> new ArrayList<>()).add(id);
@@ -183,15 +183,16 @@ public final class InstalledFileScanner {
      * compare installed files with fingerprints by name.
      */
     public static Path outermostPath(IModFile file) {
-        return outermostPath(file, modsDir());
+        return outermostPath(file, modsDir(), false);
     }
 
-    static Path outermostPath(IModFile file, Path modsDir) {
+    /** {@code log}: say so once, from the scan itself — hosts call the mapping on every judgement. */
+    static Path outermostPath(IModFile file, Path modsDir, boolean log) {
         Path path = outermost(file).getFilePath();
         if (path == null || isPlainJar(path)) return path;
         Path enclosing = NestedJarResolver.enclosingJar(path, modsDir);
         if (enclosing == null) return path;
-        LOGGER.info("{} mod file scan: {} is nested in {} (custom locator)", P, path.getFileName(), enclosing.getFileName());
+        if (log) LOGGER.info("{} mod file scan: {} is nested in {} (custom locator)", P, path.getFileName(), enclosing.getFileName());
         return enclosing;
     }
 
