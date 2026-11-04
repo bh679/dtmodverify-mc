@@ -14,6 +14,14 @@ import java.util.List;
  * plus those of any jar it embeds under {@code META-INF/jarjar/}, since NeoForge loads those as
  * mods but the player installed exactly one file — and its package fingerprint.
  *
+ * <p><b>Carrier.</b> Some mods are not the file the player installed: a bootstrap jar in
+ * {@code mods/} writes a generated jar elsewhere on every launch and registers its own locator
+ * for it (CustomSkinLoader's Universal build is one). The generated jar hashes differently on
+ * every machine, so no store file ever matches it, yet the bootstrap IS a published, hashable
+ * file. When {@link games.brennan.dtmodverify.scan.CarrierFinder} can prove that relationship
+ * the fingerprint names the bootstrap as its {@link Carrier}; {@link FileVerdicts#tierOf} may
+ * then verify the file by the carrier's hash. Null for every ordinary jar.</p>
+ *
  * <p>Immutable; produced by {@link games.brennan.dtmodverify.scan.InstalledFileScanner}, sent to
  * the relay by {@link games.brennan.dtmodverify.relay.VerifyClient} and judged by
  * {@link FileVerdicts}.</p>
@@ -25,21 +33,58 @@ import java.util.List;
  * @param modIds   lowercase mod ids the file declares, in discovery order
  * @param packages the jar's package fingerprint — see {@link PackageFingerprint} — outer jar and
  *                 embedded jars together, sorted, at most {@link PackageFingerprint#MAX}
+ * @param carrier  the {@code mods/} jar that generated this file, or null
  */
 public record FileFingerprint(String fileName, long size, String sha1, long murmur2, List<String> modIds,
-                              List<String> packages) {
+                              List<String> packages, Carrier carrier) {
+
+    /**
+     * The installed jar a generated mod file came from: the same four facts the relay keys a
+     * published file on, so it can be placed on Modrinth or CurseForge like any other file.
+     */
+    public record Carrier(String fileName, long size, String sha1, long murmur2) {
+        /** The wire form, nested under {@code "carrier"}. */
+        public JsonObject toJson() {
+            JsonObject o = new JsonObject();
+            o.addProperty("sha1", sha1);
+            o.addProperty("murmur2", murmur2);
+            o.addProperty("size", size);
+            o.addProperty("fileName", fileName);
+            return o;
+        }
+    }
 
     public FileFingerprint {
         modIds = List.copyOf(modIds);
         packages = packages == null ? List.of() : List.copyOf(packages);
     }
 
-    /** The pre-package shape, for tests and callers that only have a hash. */
-    public FileFingerprint(String fileName, long size, String sha1, long murmur2, List<String> modIds) {
-        this(fileName, size, sha1, murmur2, modIds, List.of());
+    /** The pre-carrier shape: an ordinary installed jar. */
+    public FileFingerprint(String fileName, long size, String sha1, long murmur2, List<String> modIds,
+                           List<String> packages) {
+        this(fileName, size, sha1, murmur2, modIds, packages, null);
     }
 
-    /** The wire form for {@code POST /approved-mods/verify}: {@code {sha1, murmur2, size, fileName, modIds, packages}}. */
+    /** The pre-package shape, for tests and callers that only have a hash. */
+    public FileFingerprint(String fileName, long size, String sha1, long murmur2, List<String> modIds) {
+        this(fileName, size, sha1, murmur2, modIds, List.of(), null);
+    }
+
+    /** This fingerprint with a carrier attached. */
+    public FileFingerprint withCarrier(Carrier c) {
+        return new FileFingerprint(fileName, size, sha1, murmur2, modIds, packages, c);
+    }
+
+    /** The carrier's SHA-1, or null without one. */
+    public String carrierSha1() {
+        return carrier == null ? null : carrier.sha1();
+    }
+
+    /**
+     * The wire form for {@code POST /approved-mods/verify}:
+     * {@code {sha1, murmur2, size, fileName, modIds, packages, carrier?}} — {@code carrier} only
+     * when the file has one.
+     */
     public JsonObject toJson() {
         JsonObject o = new JsonObject();
         o.addProperty("sha1", sha1);
@@ -52,6 +97,7 @@ public record FileFingerprint(String fileName, long size, String sha1, long murm
         JsonArray pk = new JsonArray();
         for (String p : packages) pk.add(p);
         o.add("packages", pk);
+        if (carrier != null) o.add("carrier", carrier.toJson());
         return o;
     }
 
