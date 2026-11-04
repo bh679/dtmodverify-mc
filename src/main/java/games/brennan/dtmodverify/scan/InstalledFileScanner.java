@@ -36,7 +36,9 @@ import java.util.concurrent.TimeUnit;
  * each with its own {@link IModFile} whose path points <em>inside</em> the outer jar. Each is
  * walked up through {@code getDiscoveryAttributes().parent()} to the file that was installed, and
  * all their ids are attributed to that one file — the player can only add or remove the outer
- * jar, so that is the only thing worth a verdict.</p>
+ * jar, so that is the only thing worth a verdict. A mod a custom locator opened from inside a
+ * library shell carries no parent; {@link NestedJarResolver} finds the shell by its bundled bytes
+ * and the ids go to the shell the same way (0.2.1).</p>
  *
  * <p><b>Exemptions.</b> A file that is not a plain {@code .jar} on disk (a dev classpath directory)
  * is skipped — nothing to hash and no player has it. So is any file carrying one of the caller's
@@ -158,9 +160,9 @@ public final class InstalledFileScanner {
     private static Map<Path, List<String>> installedFiles(Set<String> exemptIds) {
         Map<Path, List<String>> files = new LinkedHashMap<>();
         Set<Path> exempt = new HashSet<>();
+        Path modsDir = modsDir();
         for (var info : ModList.get().getMods()) {
-            IModFile root = outermost(info.getOwningFile().getFile());
-            Path path = root.getFilePath();
+            Path path = outermostPath(info.getOwningFile().getFile(), modsDir, true);
             String id = normalise(info.getModId());
             if (exemptIds.contains(id)) exempt.add(path);
             files.computeIfAbsent(path, p -> new ArrayList<>()).add(id);
@@ -171,6 +173,27 @@ public final class InstalledFileScanner {
             out.put(e.getKey(), List.copyOf(e.getValue()));
         }
         return out;
+    }
+
+    /**
+     * The file on disk a mod file came from: its jar-in-jar parent chain walked up, then — for a
+     * file a custom locator opened with no parent — the {@code mods/} jar that bundles it
+     * ({@link NestedJarResolver}). A path that resolves to nothing on disk is returned as is (the
+     * caller's {@link #isPlainJar} then drops it). The one mapping callers must share when they
+     * compare installed files with fingerprints by name.
+     */
+    public static Path outermostPath(IModFile file) {
+        return outermostPath(file, modsDir(), false);
+    }
+
+    /** {@code log}: say so once, from the scan itself — hosts call the mapping on every judgement. */
+    static Path outermostPath(IModFile file, Path modsDir, boolean log) {
+        Path path = outermost(file).getFilePath();
+        if (path == null || isPlainJar(path)) return path;
+        Path enclosing = NestedJarResolver.enclosingJar(path, modsDir);
+        if (enclosing == null) return path;
+        if (log) LOGGER.info("{} mod file scan: {} is nested in {} (custom locator)", P, path.getFileName(), enclosing.getFileName());
+        return enclosing;
     }
 
     /** Walk a jar-in-jar entry up to the file the player installed. */
@@ -250,6 +273,13 @@ public final class InstalledFileScanner {
             packages = List.of();
         }
         return new FileFingerprint(jar.getFileName().toString(), h.size(), h.sha1(), h.murmur2(), modIds, packages);
+    }
+
+    /** Test seam: the on-disk mapping for a raw path (no {@link IModFile} outside the game). */
+    static Path outermostPathForTest(Path path, Path modsDir) {
+        if (path == null || isPlainJar(path)) return path;
+        Path enclosing = NestedJarResolver.enclosingJar(path, modsDir);
+        return enclosing == null ? path : enclosing;
     }
 
     /** Test seam: forget the memoised scan. */

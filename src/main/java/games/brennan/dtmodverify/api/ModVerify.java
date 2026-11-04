@@ -76,6 +76,15 @@ public final class ModVerify {
     }
 
     /** This mod's own version as NeoForge loaded it, or {@code "?"} outside a mod environment. */
+    /**
+     * The file on disk a loaded mod file came from — jar-in-jar parent chain walked up, and a file a
+     * custom locator opened from inside a library shell mapped to that shell (0.2.1). Use this, not
+     * the parent chain alone, when comparing the mod list with {@link FileFingerprint#fileName()}.
+     */
+    public static java.nio.file.Path outermostPath(net.neoforged.neoforgespi.locating.IModFile file) {
+        return InstalledFileScanner.outermostPath(file);
+    }
+
     public static String version() {
         try {
             return ModList.get().getModContainerById(DtModVerify.MOD_ID)
