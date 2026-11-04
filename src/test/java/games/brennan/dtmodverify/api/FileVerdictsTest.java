@@ -78,4 +78,33 @@ class FileVerdictsTest {
         assertEquals(List.of(), unverifiedFrom(List.of(), Set.of(), Map.of()),
             "no files scanned means nothing suspect — never 'everything is fake'");
     }
+
+    @Test
+    @DisplayName("Carrier: an approved bootstrap verifies the file it generated, for allowlisted ids only")
+    void carrier() {
+        String boot = "c".repeat(40);
+        FileFingerprint.Carrier c = new FileFingerprint.Carrier("CustomSkinLoader_Universal-15.1.jar", 222917, boot, 7L);
+        FileFingerprint gen = new FileFingerprint("CustomSkinLoader-Common.jar", 122701, "d".repeat(40), 9L,
+            List.of("customskinloader"), List.of("customskinloader.config", "customskinloader.mod"), c);
+        Set<String> allow = Set.of("customskinloader");
+        assertEquals(Verdict.VERIFIED, FileVerdicts.tierOf(gen, Set.of(boot), Map.of(), EXEMPT, allow),
+            "approved carrier + allowlisted id");
+        assertEquals(Verdict.UNKNOWN, FileVerdicts.tierOf(gen, Set.of(boot), Map.of(), EXEMPT, Set.of()),
+            "the id is not on the allowlist: judged as if there were no carrier");
+        assertEquals(Verdict.UNKNOWN, FileVerdicts.tierOf(gen, Set.of(boot), Map.of(), EXEMPT),
+            "the four-argument rule accepts no carriers at all");
+        assertEquals(Verdict.UNKNOWN, FileVerdicts.tierOf(gen, Set.of("e".repeat(40)), Map.of(), EXEMPT, allow),
+            "an unapproved carrier vouches for nothing");
+        FileFingerprint two = new FileFingerprint("x.jar", 1, "d".repeat(40), 9L, List.of("customskinloader", "jei"),
+            List.of("customskinloader.config"), c);
+        assertEquals(Verdict.UNKNOWN, FileVerdicts.tierOf(two, Set.of(boot), Map.of(), EXEMPT, allow),
+            "every declared id must be allowlisted");
+        FileFingerprint exempt = new FileFingerprint("x.jar", 1, "d".repeat(40), 9L, List.of("customskinloader", "minecraft"),
+            List.of("customskinloader.config"), c);
+        assertEquals(Verdict.VERIFIED, FileVerdicts.tierOf(exempt, Set.of(boot), Map.of(), EXEMPT, allow),
+            "exempt ids are skipped, as everywhere else");
+        FileFingerprint onlyExempt = new FileFingerprint("x.jar", 1, "d".repeat(40), 9L, List.of("minecraft"), List.of(), c);
+        assertEquals(Verdict.PLAUSIBLE, FileVerdicts.tierOf(onlyExempt, Set.of(boot), Map.of(), EXEMPT, allow),
+            "a file declaring nothing but exempt ids is not carrier-verified");
+    }
 }

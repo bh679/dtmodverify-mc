@@ -35,13 +35,13 @@ All entry points are static, under `games.brennan.dtmodverify.api`:
 
 | Class | Members |
 |---|---|
-| `ModVerify` | `scan(Set<String> exemptIds)` → `CompletableFuture<List<FileFingerprint>>` (once per JVM, daemon thread) · `current(long timeoutMs)` → `List<FileFingerprint>` · `isDone()` · `fileOf(String modId)` · `tierOf(FileFingerprint, Set<String> approvedSha1s, Map<String, Set<String>> knownPackages, Set<String> exemptIds)` → `Verdict` · `verify(String relayBaseUrl, String dtVersion, List<FileFingerprint>)` → `CompletableFuture<VerifyClient.VerifyAnswer>` · `version()` |
-| `FileFingerprint` | record `(fileName, size, sha1, murmur2, modIds, packages)` · `toJson()` · `display()` |
+| `ModVerify` | `scan(Set<String> exemptIds)` → `CompletableFuture<List<FileFingerprint>>` (once per JVM, daemon thread) · `current(long timeoutMs)` → `List<FileFingerprint>` · `isDone()` · `fileOf(String modId)` · `tierOf(FileFingerprint, Set<String> approvedSha1s, Map<String, Set<String>> knownPackages, Set<String> exemptIds)` → `Verdict` · `tierOf(…, Set<String> carrierApprovedIds)` (0.2: honours a carrier for allowlisted ids) · `verify(String relayBaseUrl, String dtVersion, List<FileFingerprint>)` → `CompletableFuture<VerifyClient.VerifyAnswer>` · `version()` |
+| `FileFingerprint` | record `(fileName, size, sha1, murmur2, modIds, packages, carrier)` · nested `Carrier(fileName, size, sha1, murmur2)` (0.2: the `mods/` jar that generated this file, else null — `scan.CarrierFinder`) · `withCarrier(Carrier)` · `carrierSha1()` · `toJson()` (adds `"carrier": {…}` when present) · `display()` |
 | `Verdict` | `VERIFIED`, `PLAUSIBLE`, `UNKNOWN`, `SUSPECT` — only `SUSPECT` should cost a run |
 | `FileVerdicts` | the pure `tierOf(...)` rule |
 
 Lower level: `fingerprint.PackageFingerprint` (`keyOf`, `isValid`, `ofJar`, `ofBytes`, `MAX`),
-`fingerprint.CurseForgeFingerprint` (`hash`, `normalizedLength`), `scan.InstalledFileScanner`,
+`fingerprint.CurseForgeFingerprint` (`hash`, `normalizedLength`), `scan.InstalledFileScanner` (`hashes`, `fingerprint`), `scan.CarrierFinder` (`find`),
 `relay.VerifyClient` (`verifyUrl`, `verifyBody`, `verify`, `logVerdicts`).
 
 `scripts/cf_fingerprint.py` is the Python twin of `CurseForgeFingerprint`; the unit-test fixtures

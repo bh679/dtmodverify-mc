@@ -59,6 +59,12 @@ public final class ModVerify {
         return FileVerdicts.tierOf(f, approvedSha1s, knownPackages, exemptIds);
     }
 
+    /** The tier rule with a carrier allowlist — see {@link FileVerdicts#tierOf(FileFingerprint, Set, Map, Set, Set)}. */
+    public static Verdict tierOf(FileFingerprint f, Set<String> approvedSha1s, Map<String, Set<String>> knownPackages,
+                                 Set<String> exemptIds, Set<String> carrierApprovedIds) {
+        return FileVerdicts.tierOf(f, approvedSha1s, knownPackages, exemptIds, carrierApprovedIds);
+    }
+
     /**
      * POST the files to {@code relayBaseUrl}'s verify route. Never completes exceptionally; a
      * transport failure answers status 0 with an empty body. Only hashes, ids and package names

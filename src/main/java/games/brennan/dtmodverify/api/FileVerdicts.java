@@ -32,8 +32,23 @@ public final class FileVerdicts {
      */
     public static Verdict tierOf(FileFingerprint f, Set<String> approvedSha1s, Map<String, Set<String>> knownPackages,
                                  Set<String> exemptIds) {
+        return tierOf(f, approvedSha1s, knownPackages, exemptIds, Set.of());
+    }
+
+    /**
+     * {@link #tierOf(FileFingerprint, Set, Map, Set)} that also honours a {@linkplain FileFingerprint#carrier()
+     * carrier}: the file is {@link Verdict#VERIFIED} when every id it declares (exempt ids aside)
+     * is in {@code carrierApprovedIds} and the carrier's SHA-1 is in {@code approvedSha1s}. The
+     * allowlist is the operator's: a carrier only vouches for the mods it has been accepted for,
+     * so a file with a carrier and an unlisted id is judged exactly as it would be without one.
+     *
+     * @param carrierApprovedIds lowercase ids whose files may be verified by their carrier
+     */
+    public static Verdict tierOf(FileFingerprint f, Set<String> approvedSha1s, Map<String, Set<String>> knownPackages,
+                                 Set<String> exemptIds, Set<String> carrierApprovedIds) {
         if (f != null && f.sha1() != null && approvedSha1s.contains(f.sha1())) return Verdict.VERIFIED;
         if (f == null || f.modIds().isEmpty()) return Verdict.SUSPECT;
+        if (carrierVerified(f, approvedSha1s, exemptIds, carrierApprovedIds)) return Verdict.VERIFIED;
         Set<String> jar = Set.copyOf(f.packages());
         boolean unknown = false;
         for (String id : f.modIds()) {
@@ -43,5 +58,19 @@ public final class FileVerdicts {
             if (known.isEmpty() ? !jar.isEmpty() : Collections.disjoint(jar, known)) return Verdict.SUSPECT;
         }
         return unknown ? Verdict.UNKNOWN : Verdict.PLAUSIBLE;
+    }
+
+    /** Pure: an approved carrier for a file whose every non-exempt id is on the carrier allowlist. */
+    static boolean carrierVerified(FileFingerprint f, Set<String> approvedSha1s, Set<String> exemptIds,
+                                   Set<String> carrierApprovedIds) {
+        if (f.carrier() == null || f.carrier().sha1() == null || carrierApprovedIds == null) return false;
+        if (!approvedSha1s.contains(f.carrier().sha1())) return false;
+        boolean any = false;
+        for (String id : f.modIds()) {
+            if (exemptIds.contains(id)) continue;
+            if (!carrierApprovedIds.contains(id)) return false;
+            any = true;
+        }
+        return any;
     }
 }
